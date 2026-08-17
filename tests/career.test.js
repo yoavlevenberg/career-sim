@@ -5,6 +5,7 @@ import {
   chooseDraftClub,
   startSeason,
   allocateTraining,
+  resolveCurrentCard,
   runSeason,
   generateOffers,
   applyTransferChoice,
@@ -21,7 +22,10 @@ function playSeasons(seed, position, seasons) {
 
   for (let i = 0; i < seasons && state.gamePhase !== 'retired'; i++) {
     const allocation = Object.fromEntries(ABILITY_KEYS.map((k) => [k, Math.floor(state.trainingPoints / 6)]));
-    state = allocateTraining(state, allocation);
+    state = allocateTraining(state, allocation, rng);
+    while (state.cardQueue.length > 0) {
+      state = resolveCurrentCard(state, 0, rng);
+    }
     state = runSeason(state, rng);
     if (state.gamePhase === 'retired') break;
     const offers = generateOffers(state, rng);

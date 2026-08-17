@@ -284,3 +284,26 @@ export const DRAFT = {
   TIER_MAX: 6,
   OPTION_COUNT: 4,
 };
+
+// ---- Cards -----------------------------------------------------------
+
+export const CARDS = {
+  BASE_DRAW_COUNT: 2,
+  KEY_SEASON_DRAW_COUNT: 3,
+
+  // chance = base + (relevantAbility - 60)*1.2 + (morale - 50)*0.25, clamp 5-95
+  CLUTCH_ABILITY_BASELINE: 60,
+  CLUTCH_ABILITY_WEIGHT: 1.2,
+  CLUTCH_MORALE_BASELINE: 50,
+  CLUTCH_MORALE_WEIGHT: 0.25,
+  CLUTCH_MIN_CHANCE: 5,
+  CLUTCH_MAX_CHANCE: 95,
+
+  // What makes a season "key" (3 cards instead of 2), checked in this order.
+  CRISIS_TRUST_THRESHOLD: 35,
+  CRISIS_DRESSING_ROOM_THRESHOLD: 35,
+  TRANSFER_WINDOW_STRENGTH_THRESHOLD: 78, // mirrors TRANSFER.OFFER_THRESHOLD
+
+  CONSEQUENCE_DELAY_MIN: 1,
+  CONSEQUENCE_DELAY_MAX: 3,
+};

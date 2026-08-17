@@ -14,6 +14,7 @@ import {
   chooseDraftClub,
   startSeason,
   allocateTraining,
+  resolveCurrentCard,
   runSeason,
   generateOffers,
   applyTransferChoice,
@@ -21,6 +22,7 @@ import {
   retire,
   advanceAge,
 } from '../src/engine/career.js';
+import { getClutchChance } from '../src/engine/cards.js';
 
 // ---- CLI args ------------------------------------------------------------
 
@@ -94,6 +96,42 @@ function shouldAcceptRetirement(state) {
   return state.player.age >= 36 || lastLog.seasonRating < 5.3;
 }
 
+// Simple card policy: for a clutch card, take the risky option only when
+// its computed chance clears 50%; otherwise take the safe option. For
+// trade-off/dilemma cards, pick whichever option scores better on a crude
+// "relations + reputation - injuryRisk" sum (ignores ability gains).
+function pickCardOption(state) {
+  const card = state.cardQueue[0];
+  if (card.type === 'clutch') {
+    const riskyIdx = card.options.findIndex((o) => o.baseChance != null);
+    if (riskyIdx !== -1) {
+      const { chance } = getClutchChance(card.options[riskyIdx], state);
+      if (chance >= 50) return riskyIdx;
+    }
+    return card.options.findIndex((o) => o.baseChance == null);
+  }
+  // injuryRisk compounds across a whole career, not just this season, so a
+  // rational "balanced" policy discounts it more heavily than a 1:1 swap.
+  const INJURY_RISK_AVERSION = 2.5;
+  const score = (effects = {}) =>
+    (effects.managerTrust || 0) +
+    (effects.dressingRoom || 0) +
+    (effects.fans || 0) +
+    (effects.morale || 0) +
+    (effects.reputation || 0) * 2 -
+    (effects.injuryRisk || 0) * INJURY_RISK_AVERSION;
+  let bestIdx = 0;
+  let bestScore = -Infinity;
+  card.options.forEach((o, i) => {
+    const s = score(o.effects);
+    if (s > bestScore) {
+      bestScore = s;
+      bestIdx = i;
+    }
+  });
+  return bestIdx;
+}
+
 // ---- Single career run -----------------------------------------------
 
 function runCareer(seed, position, strategy) {
@@ -117,9 +155,12 @@ function runCareer(seed, position, strategy) {
   while (state.gamePhase !== 'retired' && seasons < MAX_SEASONS) {
     tpHistory.push(state.trainingPoints);
     const allocation = allocateByStrategy(state, strategy);
-    state = allocateTraining(state, allocation);
+    state = allocateTraining(state, allocation, rng);
 
-    // Stage 1 step 2: no card pool yet — go straight to the season sim.
+    while (state.cardQueue.length > 0) {
+      state = resolveCurrentCard(state, pickCardOption(state), rng);
+    }
+
     state = runSeason(state, rng);
     if (state.currentClub.tier === 1) reachedTier1 = true;
     if (state.gamePhase === 'retired') break;

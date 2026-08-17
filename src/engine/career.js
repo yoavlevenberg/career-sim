@@ -9,6 +9,7 @@ import { createRng } from './rng.js';
 import { calcOvr, clamp, rollStartingAbilities, applyAgeCurve, applyTrainingAllocation, calcTrainingPoints } from './abilities.js';
 import { generateDraftOptions, generateOffers as generateTransferOffers } from './transfers.js';
 import { simulateSeason, updateInjuryRisk, driftRelations } from './season.js';
+import { drawSeasonCards, applyCardOption } from './cards.js';
 import { chancePercent } from './rng.js';
 
 // ---- Career creation & draft --------------------------------------------
@@ -46,6 +47,8 @@ export function createCareer(seed, { name, position }) {
     trainingPoints: 0,
     lastAgeCurveDeltas: null,
     lastTrainingDeltas: null,
+    cardQueue: [],
+    cardResolutions: [],
     retirementOffer: null,
     retirementReason: null,
   };
@@ -93,22 +96,40 @@ export function startSeason(state) {
 }
 
 // Spend the season's training points on an allocation map
-// { shooting: n, dribbling: n, ... }. Stage 1 has no card pool yet, so this
-// hands control straight to `runSeason`; once cards.js exists the caller
-// will insert a 'card' phase here instead.
-export function allocateTraining(state, allocation) {
+// { shooting: n, dribbling: n, ... }, then draw this season's cards
+// (2 normally, 3 in a key season; due consequence cards fill slots first).
+export function allocateTraining(state, allocation, rng) {
   const { abilities, deltas } = applyTrainingAllocation(
     state.player.abilities,
     allocation,
     state.player.age,
     state.player.relations.managerTrust
   );
+  const afterTraining = { ...state, player: { ...state.player, abilities }, trainingPoints: 0, lastTrainingDeltas: deltas };
+
+  const { cards, pendingConsequences } = drawSeasonCards(afterTraining, rng);
+  return {
+    ...afterTraining,
+    cardQueue: cards,
+    cardResolutions: [],
+    pendingConsequences,
+    gamePhase: 'card',
+  };
+}
+
+// 3. Resolve the card currently at the front of the queue with the chosen
+// option. Stays in 'card' phase while cards remain; the caller moves to
+// `runSeason` once cardQueue is empty.
+export function resolveCurrentCard(state, optionIndex, rng) {
+  const card = state.cardQueue[0];
+  const option = card.options[optionIndex];
+  const { player, pendingConsequences, resolution } = applyCardOption(state, card, option, rng);
   return {
     ...state,
-    player: { ...state.player, abilities },
-    trainingPoints: 0,
-    lastTrainingDeltas: deltas,
-    gamePhase: 'card',
+    player,
+    pendingConsequences,
+    cardQueue: state.cardQueue.slice(1),
+    cardResolutions: [...state.cardResolutions, { cardId: card.id, optionId: option.id, resolution }],
   };
 }
 
@@ -188,6 +209,30 @@ export function applyTransferChoice(state, offer) {
       relations: { ...state.player.relations, managerTrust: offer.startingManagerTrust },
     },
   };
+}
+
+// Orchestrates season-end: simulate the season, then (unless the career
+// just ended on a career-ending injury) line up transfer offers and a
+// retirement check for the recap screen to present alongside the stats.
+export function finishSeason(state, rng) {
+  const afterSeason = runSeason(state, rng);
+  if (afterSeason.gamePhase === 'retired') return afterSeason;
+  const transferOffers = generateTransferOffers(afterSeason, rng);
+  const retirementCheck = checkRetirement(afterSeason, rng);
+  return { ...afterSeason, transferOffers, retirementCheck };
+}
+
+// Applies the recap screen's choices (transfer offer, retirement decision)
+// and either ends the career or rolls into the next season's training phase.
+export function continueToNextSeason(state, chosenOffer, acceptRetirement) {
+  const wasForced = state.retirementCheck?.forced;
+  let next = applyTransferChoice(state, chosenOffer);
+  next = { ...next, transferOffers: null, retirementCheck: null };
+  if (acceptRetirement) {
+    return retire(next, wasForced ? 'forcedAge40' : 'offeredRetirement');
+  }
+  next = advanceAge(next);
+  return startSeason(next);
 }
 
 // ---- Retirement --------------------------------------------------------

@@ -1,34 +1,34 @@
-/* Placeholder styling for Stage 1 steps 1-2. Real UI (Tailwind, dark
-   slate/emerald theme) is built in step 4 per the project spec. */
+@import 'tailwindcss';
+
 :root {
   color-scheme: dark;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  min-height: 100svh;
   background: #0f172a;
   color: #e2e8f0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
 }
 
-.placeholder-screen {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  text-align: center;
-  padding: 24px;
+@keyframes float-up {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-28px);
+    opacity: 0;
+  }
 }
 
-.placeholder-screen h1 {
-  color: #34d399;
-  margin: 0;
-}
-
-.placeholder-screen p {
-  color: #94a3b8;
-  margin: 0;
+.floating-delta {
+  animation: float-up 1.1s ease-out forwards;
 }
